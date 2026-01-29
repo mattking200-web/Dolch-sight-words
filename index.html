@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dolch Word Master</title>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --success: #2ecc71;
+            --warning: #f1c40f;
+            --danger: #e74c3c;
+            --light: #f5f6fa;
+            --dark: #2c3e50;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light);
+            color: var(--dark);
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 { margin-bottom: 10px; }
+
+        /* Dashboard & Stats */
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .stat-item { font-weight: bold; }
+        .stat-value { color: var(--primary); font-size: 1.2em; }
+
+        /* Mode Selection */
+        .mode-selector {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: transform 0.1s;
+            background-color: var(--primary);
+            color: white;
+        }
+
+        button:active { transform: scale(0.95); }
+        button.active-mode { background-color: var(--dark); border: 2px solid var(--primary); }
+
+        /* Game Area */
+        .game-area {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+            position: relative;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .word-display {
+            font-size: 5rem;
+            margin: 20px 0;
+            font-weight: bold;
+            min-height: 120px;
+        }
+
+        /* Flashcard Mode Styles */
+        .flashcard { border-bottom: 5px solid var(--primary); }
+
+        /* Sentence Mode Styles */
+        .sentence-display { font-size: 2rem; color: #555; }
+        .highlight-word { color: var(--primary); text-decoration: underline; font-weight: bold; }
+
+        /* Spelling Mode Styles */
+        .scramble { letter-spacing: 10px; color: var(--warning); }
+
+        /* Mic Button & Feedback */
+        .mic-btn {
+            font-size: 2rem;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--light);
+            color: var(--dark);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .mic-btn.listening {
+            background-color: var(--danger);
+            color: white;
+            animation: pulse 1.5s infinite;
+        }
+
+        .feedback-msg {
+            margin-top: 15px;
+            font-size: 1.2rem;
+            height: 30px;
+        }
+
+        .success { color: var(--success); }
+        .failure { color: var(--danger); }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        /* Progress Dots */
+        .mastery-dots {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ddd;
+        }
+        .dot.filled { background-color: var(--success); }
+
+    </style>
+</head>
+<body>
+
+    <h1>📚 Dolch Word Master</h1>
+
+    <div class="stats-bar">
+        <div class="stat-item">Learning: <span id="learning-count" class="stat-value">0</span></div>
+        <div class="stat-item">Mastered: <span id="mastered-count" class="stat-value">0</span></div>
+        <div class="stat-item">Current Streak: <span id="streak" class="stat-value">0</span></div>
+    </div>
+
+    <div class="mode-selector">
+        <button onclick="setMode('standard')" id="btn-standard" class="active-mode">Standard Read</button>
+        <button onclick="setMode('flash')">Flash Card (Quick)</button>
+        <button onclick="setMode('sentence')">Context Sentence</button>
+        <button onclick="setMode('spelling')">Spelling / Scramble</button>
+        <button onclick="setMode('listen')">Listen & Find</button>
+    </div>
+
+    <div class="game-area">
+        <div id="content-display">
+            <div id="word-target" class="word-display">Start</div>
+            <div class="mastery-dots" id="dots-container"></div>
+        </div>
+        
+        <div id="feedback" class="feedback-msg">Click mic to start</div>
+
+        <button id="mic-trigger" class="mic-btn" onclick="toggleListen()">
+            🎤
+        </button>
+        <p style="font-size: 0.8rem; color: #888; margin-top:10px;">(Browser must support Web Speech API)</p>
+    </div>
+
+<script>
+    // --- Data: Dolch Word List (Pre-primer subset for demo) ---
+    const dolchWords = [
+        "the", "to", "and", "a", "i", "you", "it", "in", "said", "for", "up", "look", "is", "go", "we", "little", "down", "can", "see", "not", "one", "my", "me", "big", "come", "blue", "red", "where", "jump", "away", "here", "help", "make", "yellow", "two", "play", "run", "find", "three", "funny"
+    ];
+
+    const sentences = {
+        "the": "The cat is black.", "to": "Go to the store.", "and": "Mom and Dad.", "a": "I see a dog.", "i": "I am happy.", "you": "Are you ready?", "it": "It is hot.", "in": "Put it in the box.", "said": "He said hello.", "for": "This is for you.", "up": "Look up there.", "look": "Look at me.", "is": "He is running.", "go": "Let's go home.", "we": "We are friends.", "little": "A little mouse.", "down": "Sit down please.", "can": "I can jump.", "see": "I see you.", "not": "Do not stop.", "one": "I have one apple.", "my": "That is my toy.", "me": "Give it to me.", "big": "A big truck.", "come": "Come here.", "blue": "The sky is blue.", "red": "A red ball.", "where": "Where are you?", "jump": "Jump high.", "away": "Go away.", "here": "I am here.", "help": "Please help me.", "make": "Make a cake.", "yellow": "A yellow sun.", "two": "I have two hands.", "play": "Let's play tag.", "run": "Run fast.", "find": "Find the ball.", "three": "One, two, three.", "funny": "That is funny."
+    };
+
+    // --- State Management ---
+    let state = {
+        activePool: [],      // Words currently being learned (max 5 at a time)
+        mastered: [],        // Words successfully read 3 times
+        queue: [...dolchWords], // Words waiting to be introduced
+        currentWord: null,
+        currentMode: 'standard',
+        streak: 0,
+        isListening: false
+    };
+
+    // Word Object Structure: { text: "the", successCount: 0 }
+
+    // --- Initialization ---
+    function init() {
+        // Load first 3 words
+        for(let i=0; i<3; i++) addNewWord();
+        nextTurn();
+    }
+
+    function addNewWord() {
+        if(state.queue.length > 0) {
+            const word = state.queue.shift();
+            state.activePool.push({ text: word, successCount: 0 });
+        }
+    }
+
+    // --- Core Logic: Spaced Repetition & Rotation ---
+    function nextTurn() {
+        updateStats();
+
+        // Logic: 20% chance to review a mastered word, else pick from active pool
+        const reviewRoll = Math.random();
+        
+        if (state.mastered.length > 0 && reviewRoll < 0.2) {
+            // Review a mastered word
+            const randomIndex = Math.floor(Math.random() * state.mastered.length);
+            state.currentWord = state.mastered[randomIndex];
+            state.currentWord.isReview = true;
+        } else {
+            // Pick a learning word (prioritize those with lower success counts occasionally)
+            if (state.activePool.length === 0) addNewWord(); // Safety
+            const randomIndex = Math.floor(Math.random() * state.activePool.length);
+            state.currentWord = state.activePool[randomIndex];
+            state.currentWord.isReview = false;
+        }
+
+        renderMode();
+    }
+
+    function processResult(isCorrect) {
+        const wordObj = state.currentWord;
+        const feedback = document.getElementById('feedback');
+
+        if (isCorrect) {
+            feedback.innerHTML = "✨ Great Job!";
+            feedback.className = "feedback-msg success";
+            state.streak++;
+            
+            if (!wordObj.isReview) {
+                // Increment success for learning words
+                wordObj.successCount++;
+                
+                // Check Mastery (3 successes)
+                if (wordObj.successCount >= 3) {
+                    // Move to mastered
+                    state.mastered.push(wordObj);
+                    state.activePool = state.activePool.filter(w => w.text !== wordObj.text);
+                    addNewWord(); // Bring in a new word to replace
+                    feedback.innerHTML = "🏆 Word Mastered!";
+                }
+            }
+            setTimeout(nextTurn, 1500);
+
+        } else {
+            feedback.innerHTML = "Not quite. Try again!";
+            feedback.className = "feedback-msg failure";
+            state.streak = 0;
+
+            if (wordObj.isReview) {
+                // Demote from Mastered back to Active Pool
+                state.mastered = state.mastered.filter(w => w.text !== wordObj.text);
+                wordObj.successCount = 1; // Reset to 1 so they don't start from scratch but have to prove it
+                wordObj.isReview = false;
+                state.activePool.push(wordObj);
+                feedback.innerHTML = "⚠️ Let's practice this one more.";
+            } else {
+                // If wrong while learning, just stay in pool (could decrement count if strict)
+                 // Optional: wordObj.successCount = Math.max(0, wordObj.successCount - 1);
+            }
+        }
+        updateStats();
+    }
+
+    // --- Rendering Modes ---
+    function setMode(mode) {
+        state.currentMode = mode;
+        // Update UI buttons
+        document.querySelectorAll('.mode-selector button').forEach(b => b.classList.remove('active-mode'));
+        document.getElementById(`btn-${mode}`).classList.add('active-mode');
+        renderMode();
+    }
+
+    function renderMode() {
+        const display = document.getElementById('content-display');
+        const word = state.currentWord.text;
+        const dots = getDotsHtml(state.currentWord.successCount);
+
+        // Reset Feedback
+        document.getElementById('feedback').innerHTML = "Click mic to read";
+        document.getElementById('feedback').className = "feedback-msg";
+
+        let html = '';
+
+        switch(state.currentMode) {
+            case 'standard':
+                html = `<div class="word-display">${word}</div>${dots}`;
+                break;
+            case 'flash':
+                // Flash mode logic: Show for 1s then hide
+                html = `<div class="word-display flashcard">${word}</div>${dots}`;
+                setTimeout(() => {
+                    const el = document.querySelector('.word-display');
+                    if(el) el.style.visibility = 'hidden';
+                }, 1000);
+                break;
+            case 'sentence':
+                const sent = sentences[word] || `I see the ${word}.`;
+                // Split sentence to highlight the word
+                const parts = sent.split(new RegExp(`\\b${word}\\b`, 'i'));
+                if(parts.length > 1) {
+                     html = `<div class="sentence-display">${parts[0]}<span class="highlight-word">${word}</span>${parts[1]}</div>${dots}`;
+                } else {
+                     html = `<div class="sentence-display">${sent}</div>${dots}`;
+                }
+                break;
+            case 'spelling':
+                // Shuffle letters
+                const scrambled = word.split('').sort(() => 0.5 - Math.random()).join(' ');
+                html = `<div class="word-display scramble">${scrambled}</div>
+                        <p>Unscramble and say the word!</p>${dots}`;
+                break;
+            case 'listen':
+                html = `<div class="word-display" style="font-size:3rem">🎧 Listen...</div>
+                        <button onclick="speakWord('${word}')" style="margin-top:10px">Play Sound</button>${dots}`;
+                speakWord(word);
+                break;
+        }
+
+        display.innerHTML = html;
+    }
+
+    function getDotsHtml(count) {
+        if(state.currentWord.isReview) return '<div class="mastery-dots">⭐ Mastered Review</div>';
+        
+        return `<div class="mastery-dots">
+            <div class="dot ${count >= 1 ? 'filled' : ''}"></div>
+            <div class="dot ${count >= 2 ? 'filled' : ''}"></div>
+            <div class="dot ${count >= 3 ? 'filled' : ''}"></div>
+        </div>`;
+    }
+
+    function updateStats() {
+        document.getElementById('learning-count').innerText = state.activePool.length;
+        document.getElementById('mastered-count').innerText = state.mastered.length;
+        document.getElementById('streak').innerText = state.streak;
+    }
+
+    // --- Speech Synthesis (for Listen Mode) ---
+    function speakWord(word) {
+        const utterance = new SpeechSynthesisUtterance(word);
+        window.speechSynthesis.speak(utterance);
+    }
+
+    // --- Speech Recognition (Web Speech API) ---
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const micBtn = document.getElementById('mic-trigger');
+    
+    if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            state.isListening = true;
+            micBtn.classList.add('listening');
+            document.getElementById('feedback').innerHTML = "Listening...";
+        };
+
+        recognition.onend = () => {
+            state.isListening = false;
+            micBtn.classList.remove('listening');
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript.toLowerCase().trim();
+            const target = state.currentWord.text.toLowerCase();
+
+            // Simple fuzzy match check (exact match preferred)
+            if (transcript === target || transcript.includes(target)) {
+                processResult(true);
+            } else {
+                console.log(`Heard: ${transcript}, Expected: ${target}`);
+                document.getElementById('feedback').innerText = `I heard: "${transcript}"`;
+                setTimeout(() => processResult(false), 1000);
+            }
+        };
+
+        window.toggleListen = () => {
+            if (state.isListening) recognition.stop();
+            else recognition.start();
+        };
+    } else {
+        micBtn.style.display = 'none';
+        document.getElementById('feedback').innerHTML = "⚠️ Speech Recognition not supported in this browser. Please use Chrome.";
+    }
+
+    // Start App
+    init();
+
+</script>
+</body>
+</html>
